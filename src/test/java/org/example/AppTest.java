@@ -9,6 +9,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.*;
+import java.util.*;
 import java.sql.*;
 
 import static io.restassured.RestAssured.given;
@@ -22,21 +24,20 @@ public class AppTest {
     private static RequestSpecification requestForSecondGet;
     private static Response authorization;
     private static Response response;
-    private static final String BASE_URI = "http://31.131.249.140";
-    private static final int PORT = 8080;
-    private static final String BASE_PATH = "/api/";
     private static int id;
     private static String token;
     private static Connection connection;
-    private static final String URL = "jdbc:postgresql://31.131.249.140:5432/app-db";
-    private static final String USER = "app-db-admin";
-    private static final String PASSWORD = "AiIoqv6c2k0gVhx2";
-    private static final String regionName = "Тамбов4";
-    private static final String regionNameForPatch = "Саратов4";
 
     @BeforeEach
-    public void setConnect() throws SQLException {
-        connection = DriverManager.getConnection(URL, USER, PASSWORD);
+    public void setConnect() throws SQLException, IOException {
+        FileInputStream fis;
+        Properties property = new Properties();
+        fis = new FileInputStream("src/test/resources/config.properties");
+        property.load(fis);
+        String URL_DB = property.getProperty("db.URL_DB");
+        String USER_DB = property.getProperty("db.USER_DB");
+        String PASSWORD_DB = property.getProperty("db.PASSWORD_DB");
+        connection = DriverManager.getConnection(URL_DB, USER_DB, PASSWORD_DB);
     }
 
     @AfterEach
@@ -45,14 +46,24 @@ public class AppTest {
     }
 
     @BeforeEach
-    public void init() {
+    public void init() throws IOException {
+        FileInputStream fis;
+        Properties property = new Properties();
+        fis = new FileInputStream("src/test/resources/config.properties");
+        property.load(fis);
+        String USER_AUTHORIZATION = property.getProperty("db.USER_AUTHORIZATION");
+        String PASSWORD_AUTHORIZATION = property.getProperty("db.PASSWORD_AUTHORIZATION");
+        String BASE_URI = property.getProperty("db.BASE_URI");
+        int PORT = Integer.parseInt(property.getProperty("db.PORT"));
+        String BASE_PATH = property.getProperty("db.BASE_PATH");
+        property.load(fis);
         authorization = given()
                 .baseUri(BASE_URI)
                 .port(PORT)
                 .basePath(BASE_PATH)
                 .contentType(ContentType.JSON)
                 .when()
-                .body("{ \"password\": \"kMBc3Lb7iM3sd0Mt\", \"rememberMe\": true, \"username\": \"user\" }")
+                .body("{ \"password\":\"" + PASSWORD_AUTHORIZATION + "\", \"rememberMe\": true, \"username\":\"" + USER_AUTHORIZATION + "\"}")
                 .post("/authenticate");
         token = authorization.jsonPath().getString("id_token");
         request = given()
@@ -82,19 +93,13 @@ public class AppTest {
     @DisplayName("Проверяем PATCH /api/regions/{id}")
     public void shouldPatchRegionById() {
         try {
-            response = request
+            id = request
                     .when()
-                    .body("{" + "\"regionName\":\"" + regionName + "\"}")
-                    .post("/regions/");
+                    .body("{" + "\"regionName\":\"" + TestUtils.REGION_NAME + "\"}")
+                    .post("/regions/").jsonPath().getInt("id");
             request
                     .when()
-                    .body("{" + "\"regionName\":\"" + regionName + "\"}")
-                    .post("/regions/");
-
-            id = response.jsonPath().getInt("id");
-            request
-                    .when()
-                    .body("{" + "\"id\":" + id + "," + "\"regionName\":\"" + regionNameForPatch + "\"}")
+                    .body("{" + "\"id\":" + id + "," + "\"regionName\":\"" + TestUtils.REGION_NAME_FOR_PATCH + "\"}")
                     .patch("/regions/{id}", id)
                     .then()
                     .statusCode(SC_OK);
@@ -103,7 +108,7 @@ public class AppTest {
                     .get("/regions/{id}", id)
                     .then()
                     .body("id", is(id),
-                            "regionName", is(regionNameForPatch))
+                            "regionName", is(TestUtils.REGION_NAME_FOR_PATCH))
                     .statusCode(SC_OK);
         } finally {
             requestForDelete
@@ -120,14 +125,14 @@ public class AppTest {
         try {
             id = request
                     .when()
-                    .body("{" + "\"regionName\":\"" + regionName + "\"}")
+                    .body("{" + "\"regionName\":\"" + TestUtils.REGION_NAME + "\"}")
                     .post("/regions/").jsonPath().getInt("id");
 
             request
                     .when()
                     .get("/regions/{id}", id)
                     .then()
-                    .body("regionName", is(regionName))
+                    .body("regionName", is(TestUtils.REGION_NAME))
                     .statusCode(SC_OK);
         } finally {
             requestForDelete
@@ -136,7 +141,6 @@ public class AppTest {
                     .then()
                     .statusCode(SC_NO_CONTENT);
         }
-
     }
 
     @Test
@@ -145,14 +149,14 @@ public class AppTest {
         try {
             response = request
                     .when()
-                    .body("{" + "\"regionName\":\"" + regionName + "\"}")
+                    .body("{" + "\"regionName\":\"" + TestUtils.REGION_NAME + "\"}")
                     .post("/regions/");
             id = response.jsonPath().getInt("id");
             request
                     .when()
                     .get("/regions/{id}", id)
                     .then()
-                    .body("regionName", is(regionName))
+                    .body("regionName", is(TestUtils.REGION_NAME))
                     .statusCode(SC_OK);
         } finally {
             requestForDelete
@@ -201,7 +205,7 @@ public class AppTest {
     @Test
     @DisplayName("Проверяем GET /api/regions")
     public void shouldGetRegions() throws SQLException {
-        int newRegionId;
+        int newRegionId = 0;
         try (
                 final PreparedStatement newRegion = connection.prepareStatement("INSERT INTO region(id,region_name) VALUES(?,?)", Statement.RETURN_GENERATED_KEYS)) {
             newRegion.setInt(1, 6666);
@@ -213,14 +217,18 @@ public class AppTest {
                 assumeTrue(generatedKeys.next());
                 newRegionId = generatedKeys.getInt(1);
             }
+        } catch (SQLException se) {
+            se.printStackTrace();
         }
 
-        int countRegion;
+        int countRegion = 0;
         try (
                 final PreparedStatement countRegions = connection.prepareStatement("SELECT COUNT(*) FROM region");
                 final ResultSet resultSet = countRegions.executeQuery()) {
             assumeTrue(resultSet.next());
             countRegion = resultSet.getInt(1);
+        } catch (SQLException se) {
+            se.printStackTrace();
         }
 
         try {
