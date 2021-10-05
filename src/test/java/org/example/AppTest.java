@@ -56,14 +56,14 @@ public class AppTest {
         String BASE_URI = property.getProperty("db.BASE_URI");
         int PORT = Integer.parseInt(property.getProperty("db.PORT"));
         String BASE_PATH = property.getProperty("db.BASE_PATH");
-        property.load(fis);
         authorization = given()
                 .baseUri(BASE_URI)
                 .port(PORT)
                 .basePath(BASE_PATH)
                 .contentType(ContentType.JSON)
                 .when()
-                .body("{ \"password\":\"" + PASSWORD_AUTHORIZATION + "\", \"rememberMe\": true, \"username\":\"" + USER_AUTHORIZATION + "\"}")
+                .body("{ \"password\":\"" + PASSWORD_AUTHORIZATION + "\", " +
+                        "\"rememberMe\": true, \"username\":\"" + USER_AUTHORIZATION + "\"}")
                 .post("/authenticate");
         token = authorization.jsonPath().getString("id_token");
         request = given()
@@ -95,11 +95,11 @@ public class AppTest {
         try {
             id = request
                     .when()
-                    .body("{" + "\"regionName\":\"" + TestUtils.REGION_NAME + "\"}")
+                    .body("{" + "\"regionName\":\"" + TestConst.REGION_NAME + "\"}")
                     .post("/regions/").jsonPath().getInt("id");
             request
                     .when()
-                    .body("{" + "\"id\":" + id + "," + "\"regionName\":\"" + TestUtils.REGION_NAME_FOR_PATCH + "\"}")
+                    .body("{" + "\"id\":" + id + "," + "\"regionName\":\"" + TestConst.REGION_NAME_FOR_PATCH + "\"}")
                     .patch("/regions/{id}", id)
                     .then()
                     .statusCode(SC_OK);
@@ -108,7 +108,7 @@ public class AppTest {
                     .get("/regions/{id}", id)
                     .then()
                     .body("id", is(id),
-                            "regionName", is(TestUtils.REGION_NAME_FOR_PATCH))
+                            "regionName", is(TestConst.REGION_NAME_FOR_PATCH))
                     .statusCode(SC_OK);
         } finally {
             requestForDelete
@@ -125,14 +125,14 @@ public class AppTest {
         try {
             id = request
                     .when()
-                    .body("{" + "\"regionName\":\"" + TestUtils.REGION_NAME + "\"}")
+                    .body("{" + "\"regionName\":\"" + TestConst.REGION_NAME + "\"}")
                     .post("/regions/").jsonPath().getInt("id");
 
             request
                     .when()
                     .get("/regions/{id}", id)
                     .then()
-                    .body("regionName", is(TestUtils.REGION_NAME))
+                    .body("regionName", is(TestConst.REGION_NAME))
                     .statusCode(SC_OK);
         } finally {
             requestForDelete
@@ -149,14 +149,14 @@ public class AppTest {
         try {
             response = request
                     .when()
-                    .body("{" + "\"regionName\":\"" + TestUtils.REGION_NAME + "\"}")
+                    .body("{" + "\"regionName\":\"" + TestConst.REGION_NAME + "\"}")
                     .post("/regions/");
             id = response.jsonPath().getInt("id");
             request
                     .when()
                     .get("/regions/{id}", id)
                     .then()
-                    .body("regionName", is(TestUtils.REGION_NAME))
+                    .body("regionName", is(TestConst.REGION_NAME))
                     .statusCode(SC_OK);
         } finally {
             requestForDelete
@@ -207,9 +207,9 @@ public class AppTest {
     public void shouldGetRegions() throws SQLException {
         int newRegionId = 0;
         try (
-                final PreparedStatement newRegion = connection.prepareStatement("INSERT INTO region(id,region_name) VALUES(?,?)", Statement.RETURN_GENERATED_KEYS)) {
+                final PreparedStatement newRegion = connection.prepareStatement(TestConst.SQL_INSERT_INTO_FOR_GET_REGIONS, Statement.RETURN_GENERATED_KEYS)) {
             newRegion.setInt(1, 6666);
-            newRegion.setString(2, "Липецк");
+            newRegion.setString(2, TestConst.REGION_NAME_ANY);
 
             assumeTrue(newRegion.executeUpdate() == 1);
 
@@ -217,17 +217,17 @@ public class AppTest {
                 assumeTrue(generatedKeys.next());
                 newRegionId = generatedKeys.getInt(1);
             }
-        } catch (SQLException se) {
+        } catch(SQLException se){
             se.printStackTrace();
         }
 
         int countRegion = 0;
         try (
-                final PreparedStatement countRegions = connection.prepareStatement("SELECT COUNT(*) FROM region");
+                final PreparedStatement countRegions = connection.prepareStatement(TestConst.SQL_SELECT_COUNT_FOR_GET_REGIONS);
                 final ResultSet resultSet = countRegions.executeQuery()) {
             assumeTrue(resultSet.next());
             countRegion = resultSet.getInt(1);
-        } catch (SQLException se) {
+        } catch(SQLException se){
             se.printStackTrace();
         }
 
@@ -239,7 +239,7 @@ public class AppTest {
                     .statusCode(SC_OK)
                     .body("size()", is(countRegion), "id", hasItem(newRegionId));
         } finally {
-            try (final PreparedStatement deleteRegion = connection.prepareStatement("DELETE FROM region WHERE ID=?")) {
+            try (final PreparedStatement deleteRegion = connection.prepareStatement(TestConst.SQL_DELETE_FOR_GET_REGIONS)) {
                 deleteRegion.setInt(1, newRegionId);
                 assumeTrue(deleteRegion.executeUpdate() == 1);
             }
